@@ -65,6 +65,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\lineitem($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\lineitems($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\result($this);
+            $this->resources[] = new \ltiservice_gradebookservices\local\resource\results($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\score($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\scores($this);
 
