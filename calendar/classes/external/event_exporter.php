@@ -51,7 +51,6 @@ class event_exporter extends event_exporter_base {
 
         $values = parent::define_other_properties();
 
-        $values['canedit'] = ['type' => PARAM_BOOL];
         $values['displayeventsource'] = ['type' => PARAM_BOOL];
         $values['subscription'] = [
             'type' => PARAM_RAW,
@@ -60,11 +59,22 @@ class event_exporter extends event_exporter_base {
             'null' => NULL_ALLOWED
         ];
         $values['isactionevent'] = ['type' => PARAM_BOOL];
+        $values['iscourseevent'] = ['type' => PARAM_BOOL];
         $values['candelete'] = ['type' => PARAM_BOOL];
         $values['url'] = ['type' => PARAM_URL];
         $values['action'] = [
             'type' => event_action_exporter::read_properties_definition(),
             'optional' => true,
+        ];
+        $values['editurl'] = [
+            'type' => PARAM_URL,
+            'optional' => true,
+        ];
+        $values['groupname'] = [
+            'type' => PARAM_RAW,
+            'optional' => true,
+            'default' => null,
+            'null' => NULL_ALLOWED
         ];
 
         return $values;
@@ -79,12 +89,13 @@ class event_exporter extends event_exporter_base {
     protected function get_other_values(renderer_base $output) {
         $values = parent::get_other_values($output);
 
-        $event = $this->event;
-        $legacyevent = container::get_event_mapper()->from_event_to_legacy_event($event);
+        global $CFG;
+        require_once($CFG->dirroot.'/course/lib.php');
 
+        $event = $this->event;
         $context = $this->related['context'];
         $values['isactionevent'] = false;
-
+        $values['iscourseevent'] = false;
         if ($moduleproxy = $event->get_course_module()) {
             $modulename = $moduleproxy->get('modname');
             $moduleid = $moduleproxy->get('id');
@@ -96,13 +107,13 @@ class event_exporter extends event_exporter_base {
             $params = array('update' => $moduleid, 'return' => true, 'sesskey' => sesskey());
             $editurl = new \moodle_url('/course/mod.php', $params);
             $values['editurl'] = $editurl->out(false);
+        } else if ($event->get_type() == 'course') {
+            $values['iscourseevent'] = true;
+            $url = \course_get_url($this->related['course'] ?: SITEID);
         } else {
             // TODO MDL-58866 We do not have any way to find urls for events outside of course modules.
-            global $CFG;
-            require_once($CFG->dirroot.'/course/lib.php');
             $url = \course_get_url($this->related['course'] ?: SITEID);
         }
-
         $values['url'] = $url->out(false);
 
         if ($event instanceof action_event_interface) {
@@ -119,14 +130,11 @@ class event_exporter extends event_exporter_base {
             $values['course'] = $coursesummaryexporter->export($output);
         }
 
-        $values['canedit'] = calendar_edit_event_allowed($legacyevent);
-        $values['candelete'] = calendar_delete_event_allowed($legacyevent);
-
         // Handle event subscription.
         $values['subscription'] = null;
         $values['displayeventsource'] = false;
-        if (!empty($legacyevent->subscriptionid)) {
-            $subscription = calendar_get_subscription($legacyevent->subscriptionid);
+        if ($event->get_subscription()) {
+            $subscription = calendar_get_subscription($event->get_subscription()->get('id'));
             if (!empty($subscription) && $CFG->calendar_showicalsource) {
                 $values['displayeventsource'] = true;
                 $subscriptiondata = new \stdClass();
@@ -136,6 +144,11 @@ class event_exporter extends event_exporter_base {
                 $subscriptiondata->name = $subscription->name;
                 $values['subscription'] = json_encode($subscriptiondata);
             }
+        }
+
+        if ($group = $event->get_group()) {
+            $values['groupname'] = format_string($group->get('name'), true,
+                ['context' => \context_course::instance($event->get_course()->get('id'))]);
         }
 
         return $values;

@@ -293,6 +293,12 @@ class model {
             throw new \moodle_exception('errornotimesplittings', 'analytics');
         }
 
+        if (!empty($options['evaluation'])) {
+            foreach ($timesplittings as $timesplitting) {
+                $timesplitting->set_evaluating(true);
+            }
+        }
+
         $classname = $target->get_analyser_class();
         if (!class_exists($classname)) {
             throw new \coding_exception($classname . ' class does not exists');
@@ -1231,6 +1237,19 @@ class model {
 
         return $DB->get_records('analytics_models_log', array('modelid' => $this->get_id()), 'timecreated DESC', '*',
             $limitfrom, $limitnum);
+    }
+
+    /**
+     * Merges all training data files into one and returns it.
+     *
+     * @return \stored_file|false
+     */
+    public function get_training_data() {
+
+        \core_analytics\manager::check_can_manage_models();
+
+        $timesplittingid = $this->get_time_splitting()->get_id();
+        return \core_analytics\dataset_manager::export_training_data($this->get_id(), $timesplittingid);
     }
 
     /**
