@@ -94,9 +94,6 @@ class scores extends \mod_lti\local\ltiservice\resource_base {
             require_once($CFG->libdir.'/gradelib.php');
             switch ($response->get_request_method()) {
                 case 'GET':
-                    // $json = $this->get_request_json($item->id);
-                    // $response->set_content_type($this->formats[0]);
-                    // $response->set_body($json);
                     $response->set_code(405);
                     break;
                 case 'POST':
