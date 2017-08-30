@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Strings for component 'ltiservice_gradebookservices', language 'en'
+ * This file defines tasks performed by the plugin.
  *
  * @package    ltiservice_gradebookservices
  * @copyright  2017 Cengage Learning http://www.cengage.com
@@ -23,8 +23,18 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['modulename'] = 'LTI Grades';
-$string['pluginname'] = 'LTI Gradebook Services';
-$string['servicename'] = 'LTI Gradebook Services';
-$string['cleanup'] = 'LTI Gradebook Services table cleanup';
+defined('MOODLE_INTERNAL') || die();
+
+// List of tasks.
+$tasks = array(
+    array(
+        'classname' => 'ltiservice_gradebookservices\task\cleanup_task',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => 'R',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*'
+    )
+);
 
