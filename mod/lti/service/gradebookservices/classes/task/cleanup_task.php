@@ -15,15 +15,35 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Strings for component 'ltiservice_gradebookservices', language 'en'
+ * A scheduled task for gradebookservices.
  *
  * @package    ltiservice_gradebookservices
  * @copyright  2017 Cengage Learning http://www.cengage.com
  * @author     Dirk Singels
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+namespace ltiservice_gradebookservices\task;
 
-$string['modulename'] = 'LTI Grades';
-$string['pluginname'] = 'LTI Gradebook Services';
-$string['servicename'] = 'LTI Gradebook Services';
-$string['cleanup'] = 'LTI Gradebook Services table cleanup';
+use ltiservice_gradebookservices\local\service\gradebookservices;
+
+defined('MOODLE_INTERNAL') || die();
+
+class cleanup_task extends \core\task\scheduled_task {
+
+    /**
+     * Get a descriptive name for this task (shown to admins).
+     *
+     * @return string
+     */
+    public function get_name() {
+        return get_string('cleanup', 'ltiservice_gradebookservices');
+    }
+
+    /**
+     * Run forum cron.
+     */
+    public function execute() {
+        gradebookservices::delete_orphans_ltiservice_gradebookservices_rows();
+    }
+
+}
