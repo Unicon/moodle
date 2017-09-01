@@ -116,7 +116,7 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
     private function get_request($response, $contextid, $item) {
 
         $response->set_content_type($this->formats[0]);
-        $json = gradebookservices::item_to_json($item, parent::get_endpoint(), false, $contextid);
+        $json = gradebookservices::item_to_json($item, substr(parent::get_endpoint(), 0, strrpos(parent::get_endpoint(), "/", -10)), false, $contextid);
         $response->set_body($json);
 
     }
@@ -135,6 +135,7 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
         }
         $item = \grade_item::fetch(array('id' => $olditem->id, 'courseid' => $olditem->courseid));
         $updategradeitem = false;
+        $upgradegradebookservices = false;
         if (isset($json->label) && ($item->itemname !== $json->label)) {
             $item->itemname = $json->label;
             $updategradeitem = true;
@@ -153,9 +154,27 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
                 intval($item->iteminstance) !== intval($json->resourceLinkId)) {
             $item->iteminstance = intval($json->resourceLinkId);
             $updategradeitem = true;
+            $upgradegradebookservices = true;
+        }
+        if ($upgradegradebookservices) {
+            if (!gradebookservices::check_lti_id($item->iteminstance, $item->courseid,
+                    $this->get_service()->get_tool_proxy()->id)) {
+                throw new \Exception(null, 404);
+            }
         }
         if ($updategradeitem) {
             if (!$item->update('mod/ltiservice_gradebookservices')) {
+                throw new \Exception(null, 500);
+            }
+        }
+        if ($upgradegradebookservices) {
+            try {
+                $gradebookservicesid = $DB->update_record('ltiservice_gradebookservices', array('id' => $item->itemnumber,
+                     'toolproxyid' => $this->get_service()->get_tool_proxy()->id,
+                     'resourcelinkid' => $item->iteminstance,
+                     'lineitemtoolproviderid' => $lineitemtoolproviderid
+                ));
+            } catch (\Exception $e) {
                 throw new \Exception(null, 500);
             }
         }

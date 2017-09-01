@@ -220,7 +220,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
     public static function item_to_json($item, $endpoint, $iscontainer = false, $contextid = null) {
 
         $lineitem = new \stdClass();
-        $lineitem->{"@id"} = "{$endpoint}/{$item->id}";
+        $lineitem->{"@id"} = "{$endpoint}/{$item->id}/lineitem";
         if (!$iscontainer) {
             $context = array();
             $context[] = 'http://purl.imsglobal.org/ctx/lis/v2/LineItem';
@@ -232,7 +232,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         if (!empty($item->idnumber)) {
             $lineitem->resourceId = $item->idnumber;
         }
-        $lineitem->scores = $lineitem->{"@id"} . '/scores';
+        $lineitem->scores = "{$endpoint}/{$item->id}/scores";
         if (!empty($item->lineitemtoolproviderid)) {
             $lineitem->lineItemToolProviderId = $item->lineitemtoolproviderid;
         }
@@ -244,7 +244,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         if (isset($item->iteminstance)) {
             $lineitem->resourceLinkId = strval($item->iteminstance);
         }
-        $json = json_encode($lineitem);
+        $json = json_encode($lineitem, JSON_UNESCAPED_SLASHES);
 
         return $json;
 
@@ -262,7 +262,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
     public static function result_to_json($grade, $endpoint, $includecontext = false) {
 
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
-        $id = "{$endpoint}/results/{$grade->userid}";
+        $id = "{$endpoint}/results/{$grade->userid}/result";
         $result = new \stdClass();
         $result->{"@id"} = $id;
         if ($includecontext) {
@@ -277,7 +277,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
             }
             $result->timestamp = date('Y-m-d\TH:iO', $grade->timemodified);
         }
-        $json = json_encode($result);
+        $json = json_encode($result, JSON_UNESCAPED_SLASHES);
 
         return $json;
 
@@ -295,7 +295,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
     public static function score_to_json($grade, $endpoint, $includecontext = false) {
 
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
-        $id = "{$endpoint}/scores/{$grade->userid}";
+        $id = "{$endpoint}/scores/{$grade->userid}/score";
         $result = new \stdClass();
         $result->{"@id"} = $id;
         if ($includecontext) {
@@ -312,10 +312,48 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         $result->timestamp = date('Y-m-d\TH:iO', $grade->timemodified);
         $result->resultAgent = new \stdClass();
         $result->resultAgent->userId = $grade->userid;
-        $json = json_encode($result);
+        $json = json_encode($result, JSON_UNESCAPED_SLASHES);
 
         return $json;
 
     }
 
+    /**
+     * Check if an LTI id is valid.
+     *
+     * @param string $linkid             The lti id
+     * @param string  $course             The course
+     *
+     * @return boolean
+     */
+    public static function check_lti_id($linkid, $course, $toolproxy) {
+        global $DB;
+
+        $sqlparams = array();
+        $sqlparams['linkid'] = $linkid;
+        $sqlparams['course'] = $course;
+        $sqlparams['toolproxy'] = $toolproxy;
+        $sql = 'SELECT lti.* FROM {lti} lti JOIN {lti_types} typ on lti.typeid=typ.id where
+            lti.id=? and lti.course=?  and typ.toolproxyid=?';
+        return $DB->record_exists_sql($sql, $sqlparams);
+    }
+
+    /**
+     * Sometimes, if a gradebook entry is deleted and it was a lineitem
+     * the row in the table ltiservice_gradebookservices can become an orphan
+     * This method will clean these orphans. It will happens based in a random number
+     * because it is not urgent and we don't want to slow the service
+     *
+     */
+    public static function delete_orphans_ltiservice_gradebookservices_rows() {
+        global $DB;
+        $sql = 'DELETE FROM {ltiservice_gradebookservices} where id not in
+             (SELECT DISTINCT itemnumber FROM {grade_items} gi where gi.itemtype="mod"
+             AND gi.itemmodule="lti" AND ((NOT gi.itemnumber=0) AND (NOT gi.itemnumber is null)))';
+        try {
+            $deleted = $DB->execute($sql);
+        } catch (\Exception $e) {
+            $deleted = false;
+        }
+    }
 }

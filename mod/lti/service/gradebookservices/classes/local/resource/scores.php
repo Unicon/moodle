@@ -94,9 +94,6 @@ class scores extends \mod_lti\local\ltiservice\resource_base {
             require_once($CFG->libdir.'/gradelib.php');
             switch ($response->get_request_method()) {
                 case 'GET':
-                    // $json = $this->get_request_json($item->id);
-                    // $response->set_content_type($this->formats[0]);
-                    // $response->set_body($json);
                     $response->set_code(405);
                     break;
                 case 'POST':
@@ -183,7 +180,7 @@ EOD;
         $endpoint = $lineitem->get_endpoint();
         $id = "{$endpoint}/scores/{$result->resultAgent->userId}";
         $result->{"@id"} = $id;
-        return json_encode($result);
+        return json_encode($result, JSON_UNESCAPED_SLASHES);
 
     }
 

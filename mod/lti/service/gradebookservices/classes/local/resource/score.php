@@ -99,9 +99,6 @@ class score extends \mod_lti\local\ltiservice\resource_base {
             }
             switch ($response->get_request_method()) {
                 case 'GET':
-                    // $response->set_content_type($this->formats[0]);
-                    // $json = $this->get_request_json($grade);
-                    // $response->set_body($json);
                     $response->set_code(405);
                     break;
                 case 'PUT':
@@ -171,7 +168,7 @@ class score extends \mod_lti\local\ltiservice\resource_base {
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
         $id = "{$endpoint}/scores/{$score->resultAgent->userId}";
         $score->{"@id"} = $id;
-        return json_encode($score);
+        return json_encode($score, JSON_UNESCAPED_SLASHES);
 
     }
 

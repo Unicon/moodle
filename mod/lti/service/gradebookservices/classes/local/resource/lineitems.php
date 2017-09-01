@@ -170,6 +170,12 @@ EOD;
         require_once($CFG->libdir.'/gradelib.php');
         $label = (isset($json->label)) ? $json->label : 'Item ' . time();
         $resourceid = (isset($json->resourceId)) ? $json->resourceId : '';
+        $resourcelinkid = (isset($json->resourceLinkId)) ? $json->resourceLinkId : null;
+        if ($resourcelinkid != null) {
+            if (!gradebookservices::check_lti_id($resourcelinkid, $contextid, $this->get_service()->get_tool_proxy()->id)) {
+                throw new \Exception(null, 404);
+            }
+        }
         $lineitemtoolproviderid = (isset($json->lineItemToolProviderId)) ? $json->lineItemToolProviderId : '';
         if (isset($json->assignedActivity) && isset($json->assignedActivity->activityId)) {
             $activity = $json->assignedActivity->activityId;
@@ -184,6 +190,7 @@ EOD;
         try {
             $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
                 'toolproxyid' => $this->get_service()->get_tool_proxy()->id,
+                    'resourcelinkid' => $resourcelinkid,
                     'lineitemtoolproviderid' => $lineitemtoolproviderid
             ));
         } catch (\Exception $e) {
@@ -205,7 +212,7 @@ EOD;
             $item->iteminstance = $json->resourceLinkId;
         }
         $id = $item->insert('mod/ltiservice_gradebookservices');
-        $json->{"@id"} = parent::get_endpoint() . "/{$id}";
+        $json->{"@id"} = parent::get_endpoint() . "/{$id}/lineitem";
         $json->scores = parent::get_endpoint() . "/{$id}/scores";
         if ($contextid) {
             $lineitemof = new \stdClass();
@@ -213,7 +220,7 @@ EOD;
             $json->lineItemOf = $lineitemof;
         }
 
-        return json_encode($json);
+        return json_encode($json, JSON_UNESCAPED_SLASHES);
 
     }
 
