@@ -115,34 +115,33 @@ class results extends \mod_lti\local\ltiservice\resource_base {
     private function get_request_json($itemid) {
 
         $grades = \grade_grade::fetch_all(array('itemid' => $itemid));
-        $json = <<< EOD
+        if (!$grades) {
+            throw new \Exception(null, 404);
+        } else {
+            // TODO modify this with paging code.
+            // At this moment, these numbers are just fillers.
+            $nextpage = 1;
+            $limit = 5;
+            $json = <<< EOD
 {
-  "@context" : "http://purl.imsglobal.org/ctx/lis/v1/outcomes/ResultContainer",
-  "@type" : "Page",
-  "@id" : "{$this->get_endpoint()}",
-  "pageOf" : {
-    "@type" : "ResultContainer",
-    "membershipSubject" : {
-      "result" : [
+  "results" : [
 EOD;
-        $lineitem = new lineitem($this->get_service());
-        $endpoint = $lineitem->get_endpoint();
-        $sep = "\n        ";
-        foreach ($grades as $grade) {
-            if (!empty($grade->timemodified)) {
-                $json .= $sep . gradebookservices::result_to_json($grade, $endpoint);
-                $sep = ",\n        ";
+            $lineitem = new lineitem($this->get_service());
+            $endpoint = $lineitem->get_endpoint();
+            $sep = "\n        ";
+            foreach ($grades as $grade) {
+                if (!empty($grade->timemodified)) {
+                    $json .= $sep . gradebookservices::result_to_json($grade, $endpoint);
+                    $sep = ",\n        ";
+                }
             }
-        }
-        $json .= <<< EOD
-
-      ]
-    }
-  }
+            $json .= <<< EOD
+  ],
+  "nextPage" : "{$this->get_endpoint()}?page={$nextpage}&limit={$limit}"
 }
 EOD;
+        }
         return $json;
-
     }
 
 

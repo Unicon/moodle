@@ -121,29 +121,23 @@ class lineitems extends \mod_lti\local\ltiservice\resource_base {
      */
     private function get_request_json($contextid, $items) {
 
+        // TODO modify this with paging code.
+        // At this moment, these numbers are just fillers.
+        $nextpage = 1;
+        $limit = 5;
         $json = <<< EOD
 {
-  "@context" : "http://purl.imsglobal.org/ctx/lis/v2/outcomes/LineItemContainer",
-  "@type" : "Page",
-  "@id" : "{$this->get_endpoint()}",
-  "pageOf" : {
-    "@type" : "LineItemContainer",
-    "membershipSubject" : {
-      "contextId" : "{$contextid}",
-      "lineItem" : [
-
+  "lineItems" : [
 EOD;
         $endpoint = parent::get_endpoint();
         $sep = '        ';
         foreach ($items as $item) {
-            $json .= $sep . gradebookservices::item_to_json($item, $endpoint, true);
+            $json .= $sep . gradebookservices::item_to_json($item, $endpoint);
             $sep = ",\n        ";
         }
         $json .= <<< EOD
-
-      ]
-    }
-  }
+  ],
+  "nextPage" : "{$this->get_endpoint()}?page={$nextpage}&limit={$limit}"
 }
 EOD;
 
@@ -163,7 +157,7 @@ EOD;
         global $CFG, $DB;
 
         $json = json_decode($body);
-        if (empty($json) || !isset($json->{"@type"}) || ($json->{"@type"} != 'LineItem')) {
+        if (empty($json)) {
             throw new \Exception(null, 400);
         }
 
@@ -177,14 +171,9 @@ EOD;
             }
         }
         $lineitemtoolproviderid = (isset($json->lineItemToolProviderId)) ? $json->lineItemToolProviderId : '';
-        if (isset($json->assignedActivity) && isset($json->assignedActivity->activityId)) {
-            $activity = $json->assignedActivity->activityId;
-        } else {
-            $activity = '';
-        }
         $max = 1;
-        if (isset($json->lineItemScoreMaximum)) {
-            $max = $json->lineItemScoreMaximum;
+        if (isset($json->scoreMaximum)) {
+            $max = $json->scoreMaximum;
         }
 
         try {
@@ -212,13 +201,8 @@ EOD;
             $item->iteminstance = $json->resourceLinkId;
         }
         $id = $item->insert('mod/ltiservice_gradebookservices');
-        $json->{"@id"} = parent::get_endpoint() . "/{$id}/lineitem";
-        $json->scores = parent::get_endpoint() . "/{$id}/scores";
-        if ($contextid) {
-            $lineitemof = new \stdClass();
-            $lineitemof->contextId = $contextid;
-            $json->lineItemOf = $lineitemof;
-        }
+        $json->id = parent::get_endpoint() . "/{$id}/lineitem";
+        $json->results = parent::get_endpoint() . "/{$id}/results";
 
         return json_encode($json, JSON_UNESCAPED_SLASHES);
 

@@ -95,7 +95,9 @@ class score extends \mod_lti\local\ltiservice\resource_base {
 
             $grade = \grade_grade::fetch(array('itemid' => $itemid, 'userid' => $resultid));
             if ($grade === false) {
-                throw new \Exception(null, 400);
+                if (!gradebookservices::is_user_gradable_in_course($contextid, $resultid)) {
+                    throw new \Exception(null, 400);
+                }
             }
             switch ($response->get_request_method()) {
                 case 'GET':
@@ -107,6 +109,7 @@ class score extends \mod_lti\local\ltiservice\resource_base {
                     $response->set_code(200);
                     break;
                 case 'DELETE':
+                    debugging("delete 1");
                     $this->delete_request($item, $resultid);
                     $response->set_code(200);
                     break;
@@ -136,7 +139,7 @@ class score extends \mod_lti\local\ltiservice\resource_base {
             throw new \Exception(null, 400);
         }
         $lineitem = new lineitem($this->get_service());
-        $json = gradebookservices::score_to_json($grade, $lineitem->get_endpoint(), true);
+        $json = gradebookservices::score_to_json($grade, $lineitem->get_endpoint());
 
         return $json;
 
@@ -153,21 +156,22 @@ class score extends \mod_lti\local\ltiservice\resource_base {
     private function put_request($body, $item, $userid) {
 
         $score = json_decode($body);
-        if (empty($score) || !isset($score->{"@type"}) || ($score->{"@type"} != 'Score') ||
-        (isset($score->resultAgent) && isset($score->resultAgent->userId) && ($score->resultAgent->userId !== $userid)) ||
+        if (empty($score) ||
+        (isset($score->userId) && ($score->userId !== $userid)) ||
         (!isset($score->scoreGiven))||(!isset($score->gradingProgress))) {
             throw new \Exception(null, 400);
         }
         if ($score->gradingProgress == "FullyGraded") {
             gradebookservices::set_grade_item($item, $score, $userid);
         } else {
-            $this->delete_request($item, $score->resultAgent->userId);
+            $this->delete_request($item, $score->userId);
         }
         $lineitem = new lineitem($this->get_service());
         $endpoint = $lineitem->get_endpoint();
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
-        $id = "{$endpoint}/scores/{$score->resultAgent->userId}";
-        $score->{"@id"} = $id;
+        $id = "{$endpoint}/scores/{$score->userId}/score";
+        $score->id = $id;
+        $score->scoreOf = $endpoint;
         return json_encode($score, JSON_UNESCAPED_SLASHES);
 
     }

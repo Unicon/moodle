@@ -63,10 +63,10 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         if (empty($this->resources)) {
             $this->resources = array();
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\lineitem($this);
-            $this->resources[] = new \ltiservice_gradebookservices\local\resource\lineitems($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\result($this);
-            $this->resources[] = new \ltiservice_gradebookservices\local\resource\results($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\score($this);
+            $this->resources[] = new \ltiservice_gradebookservices\local\resource\lineitems($this);
+            $this->resources[] = new \ltiservice_gradebookservices\local\resource\results($this);
             $this->resources[] = new \ltiservice_gradebookservices\local\resource\scores($this);
 
         }
@@ -212,34 +212,20 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
      *
      * @param object  $item               Grade Item record
      * @param string  $endpoint           Endpoint for lineitems container request
-     * @param boolean $iscontainer        True if the line item is one of (perhaps) many in a collection
-     * @param string  $contextid          Course's context id; if NULL, no 'lineItemOf' entry will be sent
-     *
      * @return string
      */
-    public static function item_to_json($item, $endpoint, $iscontainer = false, $contextid = null) {
+    public static function item_to_json($item, $endpoint) {
 
         $lineitem = new \stdClass();
-        $lineitem->{"@id"} = "{$endpoint}/{$item->id}/lineitem";
-        if (!$iscontainer) {
-            $context = array();
-            $context[] = 'http://purl.imsglobal.org/ctx/lis/v2/LineItem';
-            $lineitem->{"@context"} = $context;
-            $lineitem->{"@type"} = 'LineItem';
-        }
+        $lineitem->id = "{$endpoint}/{$item->id}/lineitem";
         $lineitem->label = $item->itemname;
-        $lineitem->lineItemScoreMaximum = intval($item->grademax); // TODO: is int correct?!?
+        $lineitem->scoreMaximum = intval($item->grademax); // TODO: is int correct?!?
         if (!empty($item->idnumber)) {
             $lineitem->resourceId = $item->idnumber;
         }
-        $lineitem->scores = "{$endpoint}/{$item->id}/scores";
+        $lineitem->results = "{$endpoint}/{$item->id}/results";
         if (!empty($item->lineitemtoolproviderid)) {
             $lineitem->lineItemToolProviderId = $item->lineitemtoolproviderid;
-        }
-        if ($contextid) {
-            $lineitemof = new \stdClass();
-            $lineitemof->contextId = $contextid;
-            $lineitem->lineItemOf = $lineitemof;
         }
         if (isset($item->iteminstance)) {
             $lineitem->resourceLinkId = strval($item->iteminstance);
@@ -255,26 +241,23 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
      *
      * @param object  $grade              Grade record
      * @param string  $endpoint           Endpoint for lineitem
-     * @param boolean $includecontext     True if the @context, @type and resultOf should be included in the JSON
      *
      * @return string
      */
-    public static function result_to_json($grade, $endpoint, $includecontext = false) {
+    public static function result_to_json($grade, $endpoint) {
 
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
         $id = "{$endpoint}/results/{$grade->userid}/result";
         $result = new \stdClass();
-        $result->{"@id"} = $id;
-        if ($includecontext) {
-            $result->{"@context"} = 'http://purl.imsglobal.org/ctx/lis/v2p1/Result';
-            $result->{"@type"} = 'Result';
-        }
+        $result->id = $id;
+        $result->userId = $grade->userid;
         if (!empty($grade->finalgrade)) {
             $result->resultScore = $grade->finalgrade;
             $result->resultMaximum = intval($grade->rawgrademax);
             if (!empty($grade->feedback)) {
                 $result->comment = $grade->feedback;
             }
+            $result->scoreOf = $endpoint;
             $result->timestamp = date('Y-m-d\TH:iO', $grade->timemodified);
         }
         $json = json_encode($result, JSON_UNESCAPED_SLASHES);
@@ -288,20 +271,16 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
      *
      * @param object  $grade              Grade record
      * @param string  $endpoint           Endpoint for lineitem
-     * @param boolean $includecontext     True if the @context, @type and resultOf should be included in the JSON
      *
      * @return string
      */
-    public static function score_to_json($grade, $endpoint, $includecontext = false) {
+    public static function score_to_json($grade, $endpoint) {
 
         $endpoint = substr($endpoint, 0, strripos($endpoint, '/'));
         $id = "{$endpoint}/scores/{$grade->userid}/score";
         $result = new \stdClass();
-        $result->{"@id"} = $id;
-        if ($includecontext) {
-            $result->{"@context"} = 'http://purl.imsglobal.org/ctx/lis/v1/Score';
-            $result->{"@type"} = 'Score';
-        }
+        $result->id = $id;
+        $result->userId = $grade->userid;
         $result->scoreGiven = $grade->finalgrade;
         $result->scoreMaximum = intval($grade->rawgrademax);
         if (!empty($grade->feedback)) {
@@ -310,8 +289,6 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         // TODO: activityProgress, gradingProgress; might just skip 'em as Moodle corollaries aren't obvious.
         $result->scoreOf = $endpoint;
         $result->timestamp = date('Y-m-d\TH:iO', $grade->timemodified);
-        $result->resultAgent = new \stdClass();
-        $result->resultAgent->userId = $grade->userid;
         $json = json_encode($result, JSON_UNESCAPED_SLASHES);
 
         return $json;
@@ -355,5 +332,32 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         } catch (\Exception $e) {
             $deleted = false;
         }
+    }
+
+    /**
+     * Check if a user can be graded in a course
+     *
+     * @param string $courseid            The course
+     * @param string $user                The user
+     *
+     */
+    public static function is_user_gradable_in_course($courseid, $userid) {
+        global $CFG;
+
+        $gradableuser = false;
+        $coursecontext = \context_course::instance($courseid);
+        if (is_enrolled($coursecontext, $userid, '', false)) {
+            $roles = get_user_roles($coursecontext, $userid);
+            $gradebookroles = explode(',', $CFG->gradebookroles);
+            foreach ($roles as $role) {
+                foreach ($gradebookroles as $gradebookrole) {
+                    if ($role->roleid = $gradebookrole) {
+                        $gradableuser = true;
+                    }
+                }
+            }
+        }
+
+        return $gradableuser;
     }
 }
