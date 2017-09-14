@@ -90,8 +90,26 @@ class result extends \mod_lti\local\ltiservice\resource_base {
 
             $response->set_content_type($this->formats[0]);
             $grade = \grade_grade::fetch(array('itemid' => $itemid, 'userid' => $resultid));
-            $json = $this->get_request_json($grade, $resultid);
-            $response->set_body($json);
+            if (!$grade) {
+                // If there is not grade but the user is allowed in the site
+                // create an empty answer.
+                if (gradebookservices::is_user_gradable_in_course($contextid, $resultid)) {
+                    $lineitems = new lineitems($this->get_service());
+                    $endpoint = $lineitems->get_endpoint();
+                    $id = "{$endpoint}/{$itemid}/results/{$resultid}/result";
+                    $result = new \stdClass();
+                    $result->id = $id;
+                    $result->userId = $resultid;
+                    $result->scoreOf = $endpoint;
+                    $json = json_encode($result, JSON_UNESCAPED_SLASHES);
+                    $response->set_body($json);
+                } else {
+                    throw new \Exception(null, 404);
+                }
+            } else {
+                $json = $this->get_request_json($grade, $resultid);
+                $response->set_body($json);
+            }
 
         } catch (\Exception $e) {
             $response->set_code($e->getCode());
@@ -112,12 +130,12 @@ class result extends \mod_lti\local\ltiservice\resource_base {
         $lineitem = new lineitem($this->get_service());
         if (empty($grade->finalgrade)) {
             $grade->userid = $resultid;
-            $json = gradebookservices::result_to_json($grade, $lineitem->get_endpoint(), true);
+            $json = gradebookservices::result_to_json($grade, $lineitem->get_endpoint());
         } else {
             if (empty($grade->timemodified)) {
                 throw new \Exception(null, 400);
             }
-            $json = gradebookservices::result_to_json($grade, $lineitem->get_endpoint(), true);
+            $json = gradebookservices::result_to_json($grade, $lineitem->get_endpoint());
         }
         return $json;
 

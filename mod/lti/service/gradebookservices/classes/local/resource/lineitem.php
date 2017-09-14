@@ -91,10 +91,13 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
                     $this->get_request($response, $contextid, $item);
                     break;
                 case 'PUT':
-                    $this->put_request($response->get_request_data(), $item);
+                    $json = $this->put_request($response->get_request_data(), $item);
+                    $response->set_body($json);
+                    $response->set_code(200);
                     break;
                 case 'DELETE':
                     $this->delete_request($item);
+                    $response->set_code(204);
                     break;
                 default:  // Should not be possible.
                     throw new \Exception(null, 405);
@@ -116,7 +119,7 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
     private function get_request($response, $contextid, $item) {
 
         $response->set_content_type($this->formats[0]);
-        $json = gradebookservices::item_to_json($item, substr(parent::get_endpoint(), 0, strrpos(parent::get_endpoint(), "/", -10)), false, $contextid);
+        $json = gradebookservices::item_to_json($item, substr(parent::get_endpoint(), 0, strrpos(parent::get_endpoint(), "/", -10)));
         $response->set_body($json);
 
     }
@@ -128,9 +131,9 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
      * @param string $olditem    Grade item instance
      */
     private function put_request($body, $olditem) {
-
+        global $DB;
         $json = json_decode($body);
-        if (empty($json) || !isset($json->{"@type"}) || ($json->{"@type"} != 'LineItem')) {
+        if (empty($json)) {
             throw new \Exception(null, 400);
         }
         $item = \grade_item::fetch(array('id' => $olditem->id, 'courseid' => $olditem->courseid));
@@ -140,10 +143,10 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
             $item->itemname = $json->label;
             $updategradeitem = true;
         }
-        if (isset($json->lineItemScoreMaximum) &&
+        if (isset($json->scoreMaximum) &&
                 grade_floats_different(grade_floatval($item->grademax),
-                        grade_floatval($json->lineItemScoreMaximum))) {
-            $item->grademax = grade_floatval($json->lineItemScoreMaximum);
+                        grade_floatval($json->scoreMaximum))) {
+                            $item->grademax = grade_floatval($json->scoreMaximum);
             $updategradeitem = true;
         }
         if (isset($json->resourceId) && ($item->idnumber !== $json->resourceId)) {
@@ -178,6 +181,12 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
                 throw new \Exception(null, 500);
             }
         }
+        $lineitem = new lineitem($this->get_service());
+        $endpoint = $lineitem->get_endpoint();
+        $id = "{$endpoint}/{$item->id}/lineitem";
+        $json->id = $id;
+        $json->results = "{$endpoint}/{$item->id}/results";
+        return json_encode($json, JSON_UNESCAPED_SLASHES);
 
     }
 

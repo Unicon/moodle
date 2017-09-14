@@ -97,8 +97,7 @@ class scores extends \mod_lti\local\ltiservice\resource_base {
                     $response->set_code(405);
                     break;
                 case 'POST':
-                    $json = $this->post_request_json($response->get_request_data(), $item);
-                    $response->set_code(201);
+                    $json = $this->post_request_json($response, $response->get_request_data(), $item);
                     $response->set_content_type($this->formats[1]);
                     break;
                 default:  // Should not be possible.
@@ -125,15 +124,13 @@ class scores extends \mod_lti\local\ltiservice\resource_base {
     private function get_request_json($itemid) {
 
         $grades = \grade_grade::fetch_all(array('itemid' => $itemid));
+        // TODO modify this with paging code.
+        // At this moment, these numbers are just fillers.
+        $nextpage = 1;
+        $limit = 5;
         $json = <<< EOD
 {
-  "@context" : "http://purl.imsglobal.org/ctx/lis/v1/outcomes/ScoreContainer",
-  "@type" : "Page",
-  "@id" : "{$this->get_endpoint()}",
-  "pageOf" : {
-    "@type" : "ScoreContainer",
-    "membershipSubject" : {
-      "score" : [
+      "scores" : [
 EOD;
         $lineitem = new lineitem($this->get_service());
         $endpoint = $lineitem->get_endpoint();
@@ -145,10 +142,8 @@ EOD;
             }
         }
         $json .= <<< EOD
-
-      ]
-    }
-  }
+      ],
+  "nextPage" : "{$this->get_endpoint()}?page={$nextpage}&limit={$limit}"
 }
 EOD;
         return $json;
@@ -158,28 +153,40 @@ EOD;
     /**
      * Generate the JSON for a POST request.
      *
+     * @param mod_lti\local\ltiservice\response $response  Response object for this request.
      * @param string $body       POST body
      * @param string $item       Grade item instance
      *
      * return string
      */
-    private function post_request_json($body, $item) {
+    private function post_request_json($response, $body, $item) {
 
         $result = json_decode($body);
-        if (empty($result) || !isset($result->{"@type"}) || ($result->{"@type"} != 'Score') ||
-            !isset($result->resultAgent) || !isset($result->resultAgent->userId) ||
+        if (empty($result) ||
+            !isset($result->userId) ||
             !isset($result->scoreGiven)|| !isset($result->gradingProgress)) {
             throw new \Exception(null, 400);
         }
+        $newgrade = true;
+        $grade = \grade_grade::fetch(array('itemid' => $item->id, 'userid' => $result->userId));
+        if ($grade &&  !empty($grade->timemodified)) {
+            $newgrade = false;
+        }
         if ($result->gradingProgress != 'FullyGraded') {
-            $this->reset_result($item, $result->resultAgent->userId);
+            $this->reset_result($item, $result->userId);
         } else {
-            gradebookservices::set_grade_item($item, $result, $result->resultAgent->userId);
+            gradebookservices::set_grade_item($item, $result, $result->userId);
+        }
+        if ($newgrade) {
+            $response->set_code(201);
+        } else {
+            $response->set_code(200);
         }
         $lineitem = new lineitem($this->get_service());
         $endpoint = $lineitem->get_endpoint();
-        $id = "{$endpoint}/scores/{$result->resultAgent->userId}";
-        $result->{"@id"} = $id;
+        $id = "{$endpoint}/scores/{$result->userId}";
+        $result->id = $id;
+        $result->scoreOf = $endpoint;
         return json_encode($result, JSON_UNESCAPED_SLASHES);
 
     }
