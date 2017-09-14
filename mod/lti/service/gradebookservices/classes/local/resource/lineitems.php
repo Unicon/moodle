@@ -203,6 +203,7 @@ EOD;
         $id = $item->insert('mod/ltiservice_gradebookservices');
         $json->id = parent::get_endpoint() . "/{$id}/lineitem";
         $json->results = parent::get_endpoint() . "/{$id}/results";
+        $json->scores = parent::get_endpoint() . "/{$id}/scores";
 
         return json_encode($json, JSON_UNESCAPED_SLASHES);
 

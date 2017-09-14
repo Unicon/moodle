@@ -224,6 +224,7 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
             $lineitem->resourceId = $item->idnumber;
         }
         $lineitem->results = "{$endpoint}/{$item->id}/results";
+        $lineitem->scores = "{$endpoint}/{$item->id}/scores";
         if (!empty($item->lineitemtoolproviderid)) {
             $lineitem->lineItemToolProviderId = $item->lineitemtoolproviderid;
         }
