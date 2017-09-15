@@ -136,8 +136,7 @@ EOD;
             $sep = ",\n        ";
         }
         $json .= <<< EOD
-  ],
-  "nextPage" : "{$this->get_endpoint()}?page={$nextpage}&limit={$limit}"
+  ]
 }
 EOD;
 
