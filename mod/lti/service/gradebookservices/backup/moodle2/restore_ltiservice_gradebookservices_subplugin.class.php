@@ -69,9 +69,13 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
         // so we will only create the entry in the ltiservice_gradebookservices table.
         // As we can't update the grade_item because it has not been created yet,
         // we store the previousid, so we can relate this entry with the new grede item.
+
+        // We will try to find a valid toolproxy in the system.
+        $newtoolproxyid = $this->find_proxy_id($data);
+
         try {
             $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
-                    'toolproxyid' => $data->toolproxyid,
+                    'toolproxyid' => $newtoolproxyid,
                     'resourcelinkid' => $this->get_new_parentid('lti'),
                     'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
                     'previousid' => $data->itemnumber
@@ -88,35 +92,38 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
      */
     public function process_ltiservice_gradebookservices_uncoupledgradeitem($data) {
         global $DB;
+        $data = (object)$data;
+        // We will try to find a valid toolproxy in the system.
+        $newtoolproxyid = $this->find_proxy_id($data);
         $courseid = $this->task->get_courseid();
         try {
             $sql = 'SELECT * FROM {grade_items} gi
                     INNER JOIN {ltiservice_gradebookservices} gbs where gbs.id = gi.itemnumber
                     AND courseid =? and gbs.previousid=?';
-            $conditions = array('courseid' => $courseid, 'previousid' => $data['itemnumber']);
+            $conditions = array('courseid' => $courseid, 'previousid' => $data->itemnumber);
             // We will check if the record has been restored by a previous activity
             // and if not, we will restore it creating the right grade item and the
             // right entry in the ltiservice_gradebookservices table.
             if (!$DB->record_exists_sql($sql, $conditions)) {
                 // Restore the lineitem.
                 $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
-                        'toolproxyid' => $data['toolproxyid'],
+                        'toolproxyid' => $newtoolproxyid,
                         'resourcelinkid' => null,
-                        'lineitemtoolproviderid' => $data['lineitemtoolproviderid'],
-                        'previousid' => $data['itemnumber']
+                        'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
+                        'previousid' => $data->itemnumber
                 ));
-                $oldid = $data['id'];
+                $oldid = $data->id;
                 $params = array();
-                $params['itemname'] = $data['itemname'];
+                $params['itemname'] = $data->itemname;
                 $params['gradetype'] = GRADE_TYPE_VALUE;
-                $params['grademax']  = $data['grademax'];
-                $params['grademin']  = $data['grademin'];
+                $params['grademax']  = $data->grademax;
+                $params['grademin']  = $data->grademin;
                 $item = new \grade_item(array('id' => 0, 'courseid' => $courseid));
                 \grade_item::set_properties($item, $params);
                 $item->itemtype = 'mod';
                 $item->itemmodule = 'lti';
                 $item->itemnumber = $gradebookservicesid;
-                $item->idnumber = $data['idnumber'];
+                $item->idnumber = $data->idnumber;
                 $id = $item->insert('mod/ltiservice_gradebookservices');
                 $this->set_mapping('uncoupled_grade_item', $oldid, $id);
             }
@@ -156,4 +163,28 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
             $this->log($message, backup::LOG_DEBUG);
         }
     }
+
+    /**
+     * Find the better toolproxy that matches with the lineitem.
+     * If none is found, then we set it to 0. Note this is
+     * interim solution until MDL-34161 - Fix restore to support course/site tools & submissions
+     * is implemented.
+     *
+     * @param mixed $data
+     * @return integer $newtoolproxyid
+     */
+    private function find_proxy_id($data) {
+        global $DB;
+        $newtoolproxyid = 0;
+        $oldtoolproxyguid = $data->guid;
+        $oldtoolproxyvendor = $data->vendorcode;
+
+        $dbtoolproxyjsonparams = array('guid' => $oldtoolproxyguid, 'vendorcode' => $oldtoolproxyvendor);
+        $dbtoolproxy = $DB->get_field('lti_tool_proxies', 'id', $dbtoolproxyjsonparams, IGNORE_MISSING);
+        if ($dbtoolproxy) {
+            $newtoolproxyid = $dbtoolproxy;
+        }
+        return $newtoolproxyid;
+    }
+
 }
