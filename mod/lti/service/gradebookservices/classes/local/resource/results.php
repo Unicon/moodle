@@ -66,9 +66,6 @@ class results extends \mod_lti\local\ltiservice\resource_base {
         $contextid = $params['context_id'];
         $itemid = $params['item_id'];
 
-        // GET is disabled by the moment, but we have the code ready
-        // for a future implementation.
-
         $isget = $response->get_request_method() === 'GET';
         if ($isget) {
             $contenttype = $response->get_accept();
@@ -90,7 +87,11 @@ class results extends \mod_lti\local\ltiservice\resource_base {
             require_once($CFG->libdir.'/gradelib.php');
             switch ($response->get_request_method()) {
                 case 'GET':
-                    $json = $this->get_request_json($item->id);
+                    gradebookservices::validate_paging_query_parameters($_GET['from'], $_GET['limit']);
+                    $limitfrom = optional_param('from', 0, PARAM_INT);
+                    $limitnum = optional_param('limit', 0, PARAM_INT);
+
+                    $json = $this->get_request_json($item->id, $limitfrom, $limitnum);
                     $response->set_content_type($this->formats[0]);
                     $response->set_body($json);
                     break;
@@ -108,20 +109,46 @@ class results extends \mod_lti\local\ltiservice\resource_base {
     /**
      * Generate the JSON for a GET request.
      *
-     * @param int $itemid       Grade item instance ID
+     * @param int    $itemid     Grade item instance ID
+     * @param string $limitfrom  Offset for the first result to include in this paged set
+     * @param string $limitnum   Maximum number of results to include in the response, ignored if zero
      *
      * return string
      */
-    private function get_request_json($itemid) {
+    private function get_request_json($itemid, $limitfrom, $limitnum)
+    {
 
         $grades = \grade_grade::fetch_all(array('itemid' => $itemid));
+
         if (!$grades) {
             throw new \Exception(null, 404);
         } else {
-            // TODO modify this with paging code.
-            // At this moment, these numbers are just fillers.
-            $nextpage = 1;
-            $limit = 5;
+
+            if ($limitnum > 0) {
+                // Since we only display grades that have been modified, we need to filter first in order to support
+                // paging
+                $resultgrades = array_filter($grades, function ($grade) {
+                    return !empty($grade->timemodified);
+                });
+
+                // We slice to the requested item offset to insure proper item is always first, and we always return
+                // first pageset of any remaining items
+                $grades = array_slice($resultgrades, $limitfrom);
+                if (count($grades) > 0) {
+                    $pagedgrades = array_chunk($grades, $limitnum);
+                    $pageset = 0;
+                    $grades = $pagedgrades[$pageset];
+                }
+
+                if (count($grades) == $limitnum) {
+                    // To be consistent with paging behavior elsewhere which uses Moodle DB limitfrom and limitnum where
+                    // an empty page collection may be returned for the final offset when the last page set contains the
+                    // full limit of items, do the same here
+                    $limitfrom += $limitnum;
+                    $next_page = $this->get_endpoint() . "?limit=" . $limitnum . "&from=" . $limitfrom;
+                }
+            }
+
             $json = <<< EOD
 {
   "results" : [
@@ -136,11 +163,21 @@ EOD;
                 }
             }
             $json .= <<< EOD
+
   ]
+EOD;
+            if ($next_page) {
+                $json .= ",\n";
+                $json .= <<< EOD
+  "nextPage" : "{$next_page}"
+EOD;
+            }
+            $json .= <<< EOD
+
 }
 EOD;
+            return $json;
         }
-        return $json;
     }
 
 
@@ -176,5 +213,4 @@ EOD;
         }
 
     }
-
 }

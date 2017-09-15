@@ -78,13 +78,31 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
     /**
      * Fetch the lineitem instances.
      *
-     * @param string $courseid   ID of course
+     * @param string $courseid       ID of course
+     * @param string $resourceid     Resource identifier used for filtering, may be null
+     * @param string $resourcelinkid Resource Link identifier used for filtering, may be null
+     * @param int    $limitfrom      Offset for the first line item to include in a paged set
+     * @param int    $limitnum       Maximum number of line items to include in the paged set
      *
      * @return array
      */
-    public function get_lineitems($courseid) {
+    public function get_lineitems($courseid, $resourceid, $resourcelinkid, $limitfrom, $limitnum) {
         global $DB;
 
+        $params = array('courseid' => $courseid, 'itemtype' => 'mod', 'itemmodule' => 'lti',
+            'tpid' => $this->get_tool_proxy()->id,
+            'tpid2' => $this->get_tool_proxy()->id
+        );
+
+        $optional_filters = "";
+        if (isset($resourceid)) {
+            $optional_filters .= " AND (i.idnumber = :resourceid)";
+            $params['resourceid'] = $resourceid;
+        }
+        if (isset($resourcelinkid)) {
+            $optional_filters .= " AND (i.iteminstance = :resourcelinkid)";
+            $params['resourcelinkid'] = $resourcelinkid;
+        }
         $sql = "SELECT i.*,s.lineitemtoolproviderid
                   FROM {grade_items} i
              LEFT JOIN {lti} m ON i.iteminstance = m.id
@@ -95,13 +113,12 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
                              AND (i.itemmodule = :itemmodule)
                              AND (t.toolproxyid = :tpid))
                             OR ((s.toolproxyid = :tpid2)
-                                AND (i.itemnumber = s.id)))";
-        $params = array('courseid' => $courseid, 'itemtype' => 'mod', 'itemmodule' => 'lti',
-                        'tpid' => $this->get_tool_proxy()->id,
-                        'tpid2' => $this->get_tool_proxy()->id
-                        );
+                                AND (i.itemnumber = s.id)))
+                                {$optional_filters}
+                                ORDER by i.id";
+
         try {
-            $lineitems = $DB->get_records_sql($sql, $params);
+            $lineitems = $DB->get_records_sql($sql, $params, $limitfrom, $limitnum);
         } catch (\Exception $e) {
             throw new \Exception(null, 500);
         }
@@ -360,5 +377,28 @@ class gradebookservices extends \mod_lti\local\ltiservice\service_base {
         }
 
         return $gradableuser;
+    }
+
+    /**
+     * Validates paging query parameters for boundary conditions.
+     *
+     * @param string $from offset for the first line item to include in this paged set, must be zero or greater and
+     *                    requires a limit
+     * @param string $limit maximum number of line items to include in the response, must be greater than one if provided
+     * @throws \Exception if the paging query parameters are invalid
+     */
+    public static function validate_paging_query_parameters($from, $limit) {
+
+        if (isset($limit)) {
+            if (!is_numeric($limit) || $limit <= 0) {
+                throw new \Exception(null, 400);
+            }
+        }
+
+        if (isset($from)) {
+            if (!isset($limit) || !is_numeric($from) || $from < 0) {
+                throw new \Exception(null, 400);
+            }
+        }
     }
 }
