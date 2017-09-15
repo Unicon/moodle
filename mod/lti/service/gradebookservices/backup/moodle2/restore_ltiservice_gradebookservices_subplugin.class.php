@@ -73,15 +73,20 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
         // We will try to find a valid toolproxy in the system.
         $newtoolproxyid = $this->find_proxy_id($data);
 
-        try {
-            $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
-                    'toolproxyid' => $newtoolproxyid,
-                    'resourcelinkid' => $this->get_new_parentid('lti'),
-                    'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
-                    'previousid' => $data->itemnumber
-            ));
-        } catch (\Exception $e) {
-            debugging('Error restoring the lti gradebookservicescreating: ' . $e->getTraceAsString());
+        if (!$newtoolproxyid == 0) {
+            try {
+                $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
+                        'toolproxyid' => $newtoolproxyid,
+                        'resourcelinkid' => $this->get_new_parentid('lti'),
+                        'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
+                        'previousid' => $data->itemnumber
+                ));
+            } catch (\Exception $e) {
+                debugging('Error restoring the lti gradebookservicescreating: ' . $e->getTraceAsString());
+            }
+        } else {
+            debugging('The toolproxy needed in the lti activity: '. $this->get_new_parentid('lti') .
+                    ' is not available in this system. The ltiservice_gradebookservices entry will not be created');
         }
     }
 
@@ -95,40 +100,45 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
         $data = (object)$data;
         // We will try to find a valid toolproxy in the system.
         $newtoolproxyid = $this->find_proxy_id($data);
-        $courseid = $this->task->get_courseid();
-        try {
-            $sql = 'SELECT * FROM {grade_items} gi
-                    INNER JOIN {ltiservice_gradebookservices} gbs where gbs.id = gi.itemnumber
-                    AND courseid =? and gbs.previousid=?';
-            $conditions = array('courseid' => $courseid, 'previousid' => $data->itemnumber);
-            // We will check if the record has been restored by a previous activity
-            // and if not, we will restore it creating the right grade item and the
-            // right entry in the ltiservice_gradebookservices table.
-            if (!$DB->record_exists_sql($sql, $conditions)) {
-                // Restore the lineitem.
-                $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
-                        'toolproxyid' => $newtoolproxyid,
-                        'resourcelinkid' => null,
-                        'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
-                        'previousid' => $data->itemnumber
-                ));
-                $oldid = $data->id;
-                $params = array();
-                $params['itemname'] = $data->itemname;
-                $params['gradetype'] = GRADE_TYPE_VALUE;
-                $params['grademax']  = $data->grademax;
-                $params['grademin']  = $data->grademin;
-                $item = new \grade_item(array('id' => 0, 'courseid' => $courseid));
-                \grade_item::set_properties($item, $params);
-                $item->itemtype = 'mod';
-                $item->itemmodule = 'lti';
-                $item->itemnumber = $gradebookservicesid;
-                $item->idnumber = $data->idnumber;
-                $id = $item->insert('mod/ltiservice_gradebookservices');
-                $this->set_mapping('uncoupled_grade_item', $oldid, $id);
+        if (!$newtoolproxyid == 0) {
+            $courseid = $this->task->get_courseid();
+            try {
+                $sql = 'SELECT * FROM {grade_items} gi
+                        INNER JOIN {ltiservice_gradebookservices} gbs where gbs.id = gi.itemnumber
+                        AND courseid =? and gbs.previousid=?';
+                $conditions = array('courseid' => $courseid, 'previousid' => $data->itemnumber);
+                // We will check if the record has been restored by a previous activity
+                // and if not, we will restore it creating the right grade item and the
+                // right entry in the ltiservice_gradebookservices table.
+                if (!$DB->record_exists_sql($sql, $conditions)) {
+                    // Restore the lineitem.
+                    $gradebookservicesid = $DB->insert_record('ltiservice_gradebookservices', array(
+                            'toolproxyid' => $newtoolproxyid,
+                            'resourcelinkid' => null,
+                            'lineitemtoolproviderid' => $data->lineitemtoolproviderid,
+                            'previousid' => $data->itemnumber
+                    ));
+                    $oldid = $data->id;
+                    $params = array();
+                    $params['itemname'] = $data->itemname;
+                    $params['gradetype'] = GRADE_TYPE_VALUE;
+                    $params['grademax']  = $data->grademax;
+                    $params['grademin']  = $data->grademin;
+                    $item = new \grade_item(array('id' => 0, 'courseid' => $courseid));
+                    \grade_item::set_properties($item, $params);
+                    $item->itemtype = 'mod';
+                    $item->itemmodule = 'lti';
+                    $item->itemnumber = $gradebookservicesid;
+                    $item->idnumber = $data->idnumber;
+                    $id = $item->insert('mod/ltiservice_gradebookservices');
+                    $this->set_mapping('uncoupled_grade_item', $oldid, $id);
+                }
+            } catch (\Exception $e) {
+                debugging('Error restoring the lti gradebookservicescreating: ' . $e->getTraceAsString());
             }
-        } catch (\Exception $e) {
-            debugging('Error restoring the lti gradebookservicescreating: ' . $e->getTraceAsString());
+        } else {
+            debugging("The toolproxy related with the lineitem with id: ". $data->itemnumber .
+                    " is not available in this system. The lineitem will not be restored");
         }
     }
 
@@ -146,21 +156,23 @@ class restore_ltiservice_gradebookservices_subplugin extends restore_subplugin{
         $data->itemid = $this->get_mappingid('uncoupled_grade_item', $data->itemid, null);
         $data->userid = $this->get_mappingid('user', $data->userid, null);
 
-        if (!empty($data->userid)) {
-            $data->usermodified = $this->get_mappingid('user', $data->usermodified, null);
-            $data->locktime     = $this->apply_date_offset($data->locktime);
+        if (!empty($data->itemid)) {
+            if (!empty($data->userid)) {
+                $data->usermodified = $this->get_mappingid('user', $data->usermodified, null);
+                $data->locktime     = $this->apply_date_offset($data->locktime);
 
-            $gradeexists = $DB->record_exists('grade_grades', array('userid' => $data->userid, 'itemid' => $data->itemid));
-            if ($gradeexists) {
-                $message = "User id '{$data->userid}' already has a grade entry for grade item id '{$data->itemid}'";
-                $this->log($message, backup::LOG_DEBUG);
+                $gradeexists = $DB->record_exists('grade_grades', array('userid' => $data->userid, 'itemid' => $data->itemid));
+                if ($gradeexists) {
+                    $message = "User id '{$data->userid}' already has a grade entry for grade item id '{$data->itemid}'";
+                    $this->log($message, backup::LOG_DEBUG);
+                } else {
+                    $newitemid = $DB->insert_record('grade_grades', $data);
+                    $this->set_mapping('grade_grades', $oldid, $newitemid);
+                }
             } else {
-                $newitemid = $DB->insert_record('grade_grades', $data);
-                $this->set_mapping('grade_grades', $oldid, $newitemid);
+                $message = "Mapped user id not found for user id '{$olduserid}', grade item id '{$data->itemid}'";
+                $this->log($message, backup::LOG_DEBUG);
             }
-        } else {
-            $message = "Mapped user id not found for user id '{$olduserid}', grade item id '{$data->itemid}'";
-            $this->log($message, backup::LOG_DEBUG);
         }
     }
 
