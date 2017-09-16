@@ -83,7 +83,7 @@ class lineitem extends \mod_lti\local\ltiservice\resource_base {
                 throw new \Exception(null, 400);
             }
             if (($item = $this->get_service()->get_lineitem($contextid, $itemid, !$isdelete)) === false) {
-                throw new \Exception(null, 400);
+                throw new \Exception(null, 404);
             }
             require_once($CFG->libdir.'/gradelib.php');
             switch ($response->get_request_method()) {

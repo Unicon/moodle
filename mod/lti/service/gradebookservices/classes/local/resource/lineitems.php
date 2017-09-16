@@ -66,10 +66,6 @@ class lineitems extends \mod_lti\local\ltiservice\resource_base {
     public function execute($response) {
 
         $params = $this->parse_template();
-        $resourceid = optional_param('resourceid', null, PARAM_TEXT);
-        $resourcelinkid = optional_param('resourcelinkid', null, PARAM_TEXT);
-        $limit = optional_param('limit', 0, PARAM_INT);
-        $page = optional_param('page', 0, PARAM_INT);
 
         $contextid = $params['context_id'];
         $isget = $response->get_request_method() === 'GET';
@@ -91,8 +87,18 @@ class lineitems extends \mod_lti\local\ltiservice\resource_base {
 
             switch ($response->get_request_method()) {
                 case 'GET':
-                    $items = $this->get_service()->get_lineitems($contextid);
-                    $json = $this->get_request_json($contextid, $items);
+                    $resourceid = optional_param('resource_id', null, PARAM_TEXT);
+                    $resourcelinkid = optional_param('resource_link_id', null, PARAM_TEXT);
+                    gradebookservices::validate_paging_query_parameters($_GET['from'], $_GET['limit']);
+                    $limitfrom = optional_param('from', 0, PARAM_INT);
+                    $limitnum = optional_param('limit', 0, PARAM_INT);
+
+                    $items = $this->get_service()->get_lineitems($contextid, $resourceid, $resourcelinkid, $limitfrom,
+                        $limitnum);
+
+                    $json = $this->get_request_json($contextid, $items, $resourceid, $resourcelinkid, $limitfrom,
+                        $limitnum);
+
                     $response->set_content_type($this->formats[0]);
                     break;
                 case 'POST':
@@ -114,17 +120,30 @@ class lineitems extends \mod_lti\local\ltiservice\resource_base {
     /**
      * Generate the JSON for a GET request.
      *
-     * @param string $contextid  Course ID
-     * @param array  $items      Array of lineitems
+     * @param string $contextid      Course ID
+     * @param array  $items          Array of lineitems
+     * @param string $resourceid     Resource identifier used for filtering, may be null
+     * @param string $resourcelinkid Resource Link identifier used for filtering, may be null
+     * @param int    $limitfrom      Offset of the first line item to return
+     * @param int    $limitnum       Maximum number of line items to return, ignored if zero or less
      *
      * return string
      */
-    private function get_request_json($contextid, $items) {
+    private function get_request_json($contextid, $items, $resourceid, $resourcelinkid, $limitfrom, $limitnum) {
 
-        // TODO modify this with paging code.
-        // At this moment, these numbers are just fillers.
-        $nextpage = 1;
-        $limit = 5;
+        if ($limitnum > 0) {
+            if (count($items) == $limitnum) {
+                $limitfrom += $limitnum;
+                $next_page = $this->get_endpoint() . "?limit=" . $limitnum . "&from=" . $limitfrom;
+                if (isset($resourceid)) {
+                    $next_page .= "&resource_id={$resourceid}";
+                }
+                if (isset($resourcelinkid)) {
+                    $next_page .= "&resource_link_id={$resourcelinkid}";
+                }
+            }
+        }
+
         $json = <<< EOD
 {
   "lineItems" : [
@@ -136,12 +155,21 @@ EOD;
             $sep = ",\n        ";
         }
         $json .= <<< EOD
+
   ]
+EOD;
+        if ($next_page) {
+            $json .= ",\n";
+            $json .= <<< EOD
+  "nextPage" : "{$next_page}"
+
+EOD;
+        }
+            $json .= <<< EOD
 }
 EOD;
 
         return $json;
-
     }
 
     /**
@@ -225,5 +253,4 @@ EOD;
         return $value;
 
     }
-
 }
